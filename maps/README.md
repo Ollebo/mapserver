@@ -1,0 +1,1 @@
+# This is the locations of where you will put map images to be proccess
