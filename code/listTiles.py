@@ -4,6 +4,8 @@ import os
 
 def listTiles():
     path = "/data/web/tif"
+    if os.path.exists(path) == False:
+        os.mkdir(path)
     dir_list = os.listdir(path)
     print("Files and directories in '", path, "' :")
     # prints all files

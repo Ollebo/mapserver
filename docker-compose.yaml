@@ -8,6 +8,7 @@ services:
     volumes:
       - ./web:/data/web
       - ./maps:/data/maps
+      - ./:/code
     ports:
       - 8888:8080
     environment:
