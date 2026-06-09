@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="max-w-2xl mt-6">
+  <h1 class="text-2xl font-semibold mb-4">Settings</h1>
+
+  {% if connected %}
+    <div class="mb-6 inline-flex items-center px-3 py-1.5 rounded-full bg-green-100 text-green-800 text-sm font-medium">
+      <span class="w-2 h-2 mr-2 rounded-full bg-green-500"></span>
+      Connected to ollebo.com
+    </div>
+  {% else %}
+    <div class="mb-6 inline-flex items-center px-3 py-1.5 rounded-full bg-red-100 text-red-800 text-sm font-medium">
+      <span class="w-2 h-2 mr-2 rounded-full bg-red-500"></span>
+      Disconnected{% if status_detail %} — {{ status_detail }}{% endif %}
+    </div>
+  {% endif %}
+
+  <form method="post" action="/settings" class="space-y-6">
+    <div>
+      <label for="ollebo_key" class="block text-sm font-medium text-gray-900 mb-1">Map key</label>
+      <input
+        type="password"
+        id="ollebo_key"
+        name="ollebo_key"
+        value="{{ ollebo_key }}"
+        class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5"
+        placeholder="Paste your map key" />
+      <p class="mt-1 text-xs text-gray-500">
+        Create a mapserver at <a href="https://www.ollebo.com/" class="text-blue-700 underline">ollebo.com</a> to obtain a key.
+      </p>
+    </div>
+
+    <div>
+      <label for="terracotta_public_url" class="block text-sm font-medium text-gray-900 mb-1">Public tile URL</label>
+      <input
+        type="url"
+        id="terracotta_public_url"
+        name="terracotta_public_url"
+        value="{{ terracotta_public_url }}"
+        class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5"
+        placeholder="http://localhost:5001" />
+      <p class="mt-1 text-xs text-gray-500">
+        The URL where the terracotta tile server is reachable from the browser and from ollebo.com.
+      </p>
+    </div>
+
+    <button
+      type="submit"
+      class="focus:outline-none text-white bg-green-700 hover:bg-green-800 focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm px-5 py-2.5">
+      Save
+    </button>
+  </form>
+</div>
+{% endblock %}

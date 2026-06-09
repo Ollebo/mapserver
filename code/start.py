@@ -7,13 +7,13 @@ from flask import Flask, request, render_template, redirect, send_from_directory
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
+import config
 from listMaps import listFiles, variants_for_map
 from mapmaker.makingGeotiff import makingMap, scan_and_ingest
 
 
 UPLOAD_FOLDER = "/data/maps"
 ALLOWED_EXTENSIONS = {"tif"}
-TERRACOTTA_PUBLIC_URL = os.environ.get("TERRACOTTA_PUBLIC_URL", "http://localhost:5001")
 SPACE_ID = os.environ.get("OLLEBO_SPACE_ID", "local")
 
 
@@ -46,7 +46,7 @@ def map():
         map_id=map_id,
         space_id=SPACE_ID,
         variants=variants,
-        terracotta_url=TERRACOTTA_PUBLIC_URL,
+        terracotta_url=config.terracotta_public_url(),
     )
 
 
@@ -70,6 +70,27 @@ def mapmaker():
     }
     makingMap(mapToMake)
     return redirect("/map?name=" + name)
+
+
+@app.route("/settings", methods=["GET", "POST"])
+def settings():
+    if request.method == "POST":
+        config.set_setting("ollebo_key", request.form.get("ollebo_key", "").strip())
+        config.set_setting(
+            "terracotta_public_url",
+            request.form.get("terracotta_public_url", "").strip(),
+        )
+        return redirect("/settings")
+
+    connected, status_detail = config.check_connection()
+    return render_template(
+        "settings.html",
+        title="Settings",
+        ollebo_key=config.ollebo_key(),
+        terracotta_public_url=config.terracotta_public_url(),
+        connected=connected,
+        status_detail=status_detail,
+    )
 
 
 @app.route("/public/<path:path>", methods=["GET"])

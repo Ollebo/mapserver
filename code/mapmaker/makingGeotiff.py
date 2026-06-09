@@ -4,6 +4,7 @@ import rasterio
 from rasterio.warp import transform_bounds
 import requests
 
+import config
 from mapmaker.maps import terracotta_client
 from mapmaker.maps.detect import detect_input_type
 from mapmaker.maps.variants import VARIANTS
@@ -12,7 +13,6 @@ from mapmaker.maps.variants import VARIANTS
 API_URL = os.environ.get("API", "https://www.ollebo.com/api/v1")
 SOURCE_DIR = "/data/maps"
 COG_DIR = "/data/cogs"
-TERRACOTTA_PUBLIC_URL = os.environ.get("TERRACOTTA_PUBLIC_URL", "http://localhost:5001")
 
 
 def updateMap(map):
@@ -56,7 +56,7 @@ def getGeoTiffData(tiff_file):
 def _tile_url(space_id, map_id, spec):
     base = "singleband" if spec.singleband else "rgb"
     url = "{0}/{1}/{2}/{3}/{4}/{{z}}/{{x}}/{{y}}.png".format(
-        TERRACOTTA_PUBLIC_URL, base, space_id, map_id, spec.name
+        config.terracotta_public_url(), base, space_id, map_id, spec.name
     )
     if spec.colormap and spec.singleband:
         url += "?colormap=" + spec.colormap
