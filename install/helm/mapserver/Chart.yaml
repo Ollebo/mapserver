@@ -1,0 +1,12 @@
+apiVersion: v2
+name: mapserver
+description: OlleBo self-hosted mapserver — Flask uploader + terracotta tile server.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/ollebo/mapserver
+sources:
+  - https://github.com/ollebo/mapserver
+maintainers:
+  - name: OlleBo
+    url: https://ollebo.com

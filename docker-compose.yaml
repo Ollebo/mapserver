@@ -1,4 +1,3 @@
-version: '2'
 services:
   map-server:
     build:
@@ -6,16 +5,33 @@ services:
       dockerfile: Dockerfile_build
     image: ollebo/mapserver
     volumes:
-      - ./web:/data/web
       - ./maps:/data/maps
-      - ./:/code
+      - ./cogs:/data/cogs
+      - ./db:/data/db
     ports:
       - 8888:8080
     environment:
-      - API=http://api.ollebo.com
+      - API=${API:-https://www.ollebo.com/api/v1}
+      - OLLEBO_KEY=${OLLEBO_KEY:-}
+      - OLLEBO_SPACE_ID=${OLLEBO_SPACE_ID:-local}
+      - TERRACOTTA_DB_PATH=${TERRACOTTA_DB_PATH:-/data/db/terracotta.sqlite}
+      - TERRACOTTA_PROVIDER=${TERRACOTTA_PROVIDER:-sqlite}
+      - TERRACOTTA_PUBLIC_URL=${TERRACOTTA_PUBLIC_URL:-http://localhost:5001}
+    depends_on:
+      - terracotta
 
-
-
- 
-
-
+  terracotta:
+    build:
+      context: .
+      dockerfile: Dockerfile_build
+    image: ollebo/mapserver
+    volumes:
+      - ./cogs:/data/cogs
+      - ./db:/data/db
+    ports:
+      - 5001:5000
+    environment:
+      - TERRACOTTA_DB_PATH=${TERRACOTTA_DB_PATH:-/data/db/terracotta.sqlite}
+      - TERRACOTTA_PROVIDER=${TERRACOTTA_PROVIDER:-sqlite}
+    working_dir: /code
+    command: ["sh", "-c", "mkdir -p /data/db && python3 -c 'from mapmaker.maps import terracotta_client; terracotta_client.ensure_schema()' && terracotta serve -d /data/db/terracotta.sqlite --allow-all-ips --port 5000"]

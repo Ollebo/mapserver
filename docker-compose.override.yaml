@@ -1,0 +1,11 @@
+# Auto-merged by `docker compose` when present in the project directory.
+# Provides a live-reload bind-mount for developers editing files under ./code.
+# End users who want to run the baked-in image should delete this file.
+services:
+  map-server:
+    volumes:
+      - ./code:/code
+
+  terracotta:
+    volumes:
+      - ./code:/code

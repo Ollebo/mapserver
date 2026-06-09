@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+maps/*
+!maps/README.md
+web/
+cogs/
+db/
+.env

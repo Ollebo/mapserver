@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mapserver.fullname" . }}
+  labels:
+    {{- include "mapserver.labels" . | nindent 4 }}
+data:
+  OLLEBO_SPACE_ID: {{ .Values.ollebo.spaceId | quote }}
+  API: {{ .Values.ollebo.apiUrl | quote }}
+  TERRACOTTA_PUBLIC_URL: {{ .Values.terracotta.publicUrl | quote }}
+  TERRACOTTA_DB_PATH: {{ .Values.terracotta.dbPath | quote }}
+  TERRACOTTA_PROVIDER: {{ .Values.terracotta.provider | quote }}

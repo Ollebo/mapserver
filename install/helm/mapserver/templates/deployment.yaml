@@ -1,0 +1,121 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mapserver.fullname" . }}
+  labels:
+    {{- include "mapserver.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "mapserver.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "mapserver.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: terracotta-init
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          workingDir: /code
+          command:
+            - sh
+            - -c
+            - |
+              mkdir -p /data/db &&
+              python3 -c 'from mapmaker.maps import terracotta_client; terracotta_client.ensure_schema()'
+          envFrom:
+            - configMapRef:
+                name: {{ include "mapserver.fullname" . }}
+          volumeMounts:
+            - name: db
+              mountPath: /data/db
+      containers:
+        - name: map-server
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: flask
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "mapserver.fullname" . }}
+            - secretRef:
+                name: {{ include "mapserver.fullname" . }}
+          volumeMounts:
+            - name: maps
+              mountPath: /data/maps
+            - name: cogs
+              mountPath: /data/cogs
+            - name: db
+              mountPath: /data/db
+          {{- with .Values.resources.flask }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        - name: terracotta
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          workingDir: /code
+          command:
+            - sh
+            - -c
+            - terracotta serve -d {{ .Values.terracotta.dbPath }} --allow-all-ips --port 5000
+          ports:
+            - name: terracotta
+              containerPort: 5000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "mapserver.fullname" . }}
+          volumeMounts:
+            - name: cogs
+              mountPath: /data/cogs
+            - name: db
+              mountPath: /data/db
+          {{- with .Values.resources.terracotta }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: maps
+          persistentVolumeClaim:
+            claimName: {{ include "mapserver.fullname" . }}-maps
+        - name: cogs
+          persistentVolumeClaim:
+            claimName: {{ include "mapserver.fullname" . }}-cogs
+        - name: db
+          persistentVolumeClaim:
+            claimName: {{ include "mapserver.fullname" . }}-db

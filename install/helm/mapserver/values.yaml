@@ -1,0 +1,81 @@
+# Default values for the OlleBo mapserver Helm chart.
+
+image:
+  repository: ghcr.io/ollebo/mapserver
+  tag: latest
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+# Pairing with an ollebo.com space. `key` is stored in a Secret.
+# `spaceId` and `apiUrl` live in a ConfigMap.
+ollebo:
+  # Reserved for the future ollebo.com registration handshake. Safe to set now;
+  # not yet consumed by code.
+  key: ""
+  spaceId: local
+  apiUrl: https://www.ollebo.com/api/v1
+
+terracotta:
+  # Browser-facing tile URL. Must be reachable from any viewer (including
+  # ollebo.com). When ingress.enabled=true, set this to the same scheme+host
+  # as ingress.host.
+  publicUrl: http://localhost:5001
+  dbPath: /data/db/terracotta.sqlite
+  provider: sqlite
+
+# One Service exposes both container ports.
+service:
+  type: ClusterIP
+  flaskPort: 8080
+  terracottaPort: 5000
+
+# Optional public Ingress in front of both ports.
+# The default rule routes / to the Flask UI and /tiles to terracotta. Adjust
+# `paths` if your Ingress controller needs different path semantics.
+ingress:
+  enabled: false
+  className: ""
+  host: tiles.example.com
+  tlsSecret: ""
+  annotations: {}
+  paths:
+    flask: /
+    terracotta: /tiles
+
+# Three independent PVCs back the three data directories.
+persistence:
+  maps:
+    size: 20Gi
+    storageClassName: ""
+    accessMode: ReadWriteOnce
+  cogs:
+    size: 50Gi
+    storageClassName: ""
+    accessMode: ReadWriteOnce
+  db:
+    size: 1Gi
+    storageClassName: ""
+    accessMode: ReadWriteOnce
+
+resources:
+  flask:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+  terracotta:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+podSecurityContext: {}
+securityContext: {}

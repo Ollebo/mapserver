@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "mapserver.fullname" . }}-db
+  labels:
+    {{- include "mapserver.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.db.accessMode | default "ReadWriteOnce" }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.db.size | quote }}
+  {{- with .Values.persistence.db.storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
