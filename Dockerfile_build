@@ -1,54 +1,22 @@
-FROM python
-#Making folder for code
+FROM ubuntu:24.04
+
+EXPOSE 8080
+ENV LC_ALL=C.UTF-8
+ENV LANG=C.UTF-8
+ENV DEBIAN_FRONTEND=noninteractive
+
 RUN mkdir /code
-RUN mkdir /files
-
-#RUN yum install postgresql postgresql-devel python-devel -y
-
-#Copying code to container
-COPY ./code /code/
-
-
-#Mak makings tools
-RUN apt-get update && apt-get install python3-pip gdal-bin libgdal-dev -y
-
-#Setting working directory
 WORKDIR /code
 
-#Installing dependencies
+RUN apt-get update && apt-get install -y python3-pip gdal-bin libgdal-dev python3-gdal \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY ./code/requirements.txt /code/
+RUN pip install -r /code/requirements.txt --break-system-packages --ignore-installed
+
+RUN mkdir -p /data/maps /data/cogs /data/db
+
+COPY ./code /code/
 RUN chmod +x /code/start.sh
-RUN pip3 install -r /code/requirements.txt
-#
-##Running the code
-## Set runtime interface client as default command for the container runtime
-#ENTRYPOINT [ "/usr/local/bin/python", "-m", "awslambdaric" ]
-## Pass the name of the function handler as an argument to the runtime
-CMD [ "/code/start.sh" ]
 
-
-# Define custom function directory
-#ARG FUNCTION_DIR="/function"
-#
-#FROM python:3.12 as build-image
-#
-## Include global arg in this stage of the build
-#ARG FUNCTION_DIR
-#
-## Copy function code
-#RUN mkdir -p ${FUNCTION_DIR}
-#COPY ./code ${FUNCTION_DIR}
-#
-## Install the function's dependencies
-#RUN pip install \
-#    --target ${FUNCTION_DIR} \
-#        awslambdaric
-#
-#RUN pip3 install --target ${FUNCTION_DIR} psycopg2
-#RUN pip3 install --target ${FUNCTION_DIR} flask
-#RUN pip3 install --target ${FUNCTION_DIR} flask_cors
-#RUN pip3 install --target ${FUNCTION_DIR} boto3
-#RUN pip3 install --target ${FUNCTION_DIR} pymongo 
-#
-## Use a slim version of the base Python image to reduce the final image size
-#
-#
+CMD ["/code/start.sh"]

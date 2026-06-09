@@ -1,107 +1,96 @@
-#
-#
-#
-# File to start
-#
-# Lissen for events from the que
 #!/usr/bin/env python
-import time
-import time
 import json
 import os
+
 import names
-from flask import Flask, request, render_template, url_for, redirect, jsonify, send_from_directory
+from flask import Flask, request, render_template, redirect, send_from_directory
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
-
-from listMaps import listFiles
-from listTiles import listTiles
-from mapmaker.makingGeotiff import makingMap
+from listMaps import listFiles, variants_for_map
+from mapmaker.makingGeotiff import makingMap, scan_and_ingest
 
 
-UPLOAD_FOLDER = '/data/maps'
-ALLOWED_EXTENSIONS = {'tif'}
+UPLOAD_FOLDER = "/data/maps"
+ALLOWED_EXTENSIONS = {"tif"}
+TERRACOTTA_PUBLIC_URL = os.environ.get("TERRACOTTA_PUBLIC_URL", "http://localhost:5001")
+SPACE_ID = os.environ.get("OLLEBO_SPACE_ID", "local")
+
 
 def allowed_file(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-CORS(app ,resources={r"/maps/*": {"origins": "*"}})
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+CORS(app)
 
 
-
-
-
-@app.route("/", methods = ['GET', 'POST'])
+@app.route("/", methods=["GET", "POST"])
 def start():
-	if request.method == 'POST':
-		print(request.get_data(as_text=True))
-		return "Move along nothing to see"
-	else:
-		files = json.loads(json.dumps(listFiles()))
-		return render_template('home.html', title='Home', files=files)
-	
-@app.route("/map", methods = ['GET', 'POST'])
+    if request.method == "POST":
+        return "Move along nothing to see"
+    files = json.loads(json.dumps(listFiles()))
+    return render_template("home.html", title="Home", files=files)
+
+
+@app.route("/map", methods=["GET", "POST"])
 def map():
-	if request.method == 'POST':
-		reqData = request.form.get('name')
-		return render_template('map.html', title='Map', filename=reqData)
-	else:
-		
-		return render_template('map.html', title='Map')
+    name = request.values.get("name", "")
+    map_id = name.rsplit(".", 1)[0] if name else ""
+    variants = variants_for_map(SPACE_ID, map_id) if map_id else []
+    return render_template(
+        "map.html",
+        title="Map",
+        filename=name,
+        map_id=map_id,
+        space_id=SPACE_ID,
+        variants=variants,
+        terracotta_url=TERRACOTTA_PUBLIC_URL,
+    )
 
 
-@app.route("/mapmaker", methods = ['POST'])
+@app.route("/rescan", methods=["POST"])
+def rescan():
+    scan_and_ingest()
+    return redirect("/")
+
+
+@app.route("/mapmaker", methods=["POST"])
 def mapmaker():
-		reqName = request.form.get('name')
-		reqTags = request.form.get('tags')
-		reqLocations = request.form.get('locations')
-		mapToMake = {
-		    "filename": reqName,
-		    "format": "tif",
-			"tags": reqTags,
-			"locations": reqLocations,
-		    "publisher": "ollebo"}
-		print(mapToMake)
-		mapData = makingMap(mapToMake)
-		mapData = "test"
-		return render_template('mapmaker.html', title='Map', filename=reqName, tags=reqTags, locations=reqLocations, mapData=mapData)
-	
-@app.route("/maptiles", methods = ['GET'])
-def maptiles():
-		files = json.loads(json.dumps(listTiles()))
-		return render_template('tiles.html', title='Map' , files=files)
+    name = request.form.get("name")
+    tags = request.form.get("tags") or request.form.get("tag")
+    location = request.form.get("locations") or request.form.get("location")
+    mapToMake = {
+        "filename": name,
+        "format": "tif",
+        "tags": tags,
+        "locations": location,
+        "publisher": "ollebo",
+    }
+    makingMap(mapToMake)
+    return redirect("/map?name=" + name)
 
 
-## Public tiles
-@app.route("/tiles/<path:path>", methods = ['GET'])
-def tiles(path):
-	return send_from_directory('/data/web', path)
-
-
-## Public folder
-@app.route("/public/<path:path>", methods = ['GET'])
+@app.route("/public/<path:path>", methods=["GET"])
 def public(path):
-	return send_from_directory('public', path)
+    return send_from_directory("public", path)
 
 
-@app.route('/upload', methods=['GET', 'POST'])
+@app.route("/upload", methods=["GET", "POST"])
 def upload_file():
-    if request.method == 'POST':
-        # check if the post request has the file part
-        if 'file' not in request.files:
-            print('No file part')
-        file = request.files['file']
-        # If the user does not select a file, the browser submits an
-        # empty file without a filename.
-        if file.filename == '':
-            print('No selected file')
+    if request.method == "POST":
+        if "file" not in request.files:
+            print("No file part")
+        file = request.files["file"]
+        if file.filename == "":
+            print("No selected file")
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], names.get_first_name()+"-"+filename))
+            file.save(os.path.join(
+                app.config["UPLOAD_FOLDER"],
+                names.get_first_name() + "-" + filename,
+            ))
             return redirect("/")
 
-    return render_template('upload.html', title='Upload')
+    return render_template("upload.html", title="Upload")
