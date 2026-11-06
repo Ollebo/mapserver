@@ -10,3 +10,4 @@ data:
   TERRACOTTA_PUBLIC_URL: {{ .Values.terracotta.publicUrl | quote }}
   TERRACOTTA_DB_PATH: {{ .Values.terracotta.dbPath | quote }}
   TERRACOTTA_PROVIDER: {{ .Values.terracotta.provider | quote }}
+  TC_ALLOWED_ORIGINS_TILES: {{ .Values.terracotta.allowedOrigins | toJson | quote }}

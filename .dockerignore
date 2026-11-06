@@ -1,0 +1,11 @@
+.git
+.github
+.env
+maps
+cogs
+db
+web
+test-bild
+install
+**/__pycache__
+**/*.pyc

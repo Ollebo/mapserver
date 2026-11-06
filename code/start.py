@@ -58,7 +58,9 @@ def rescan():
 
 @app.route("/mapmaker", methods=["POST"])
 def mapmaker():
-    name = request.form.get("name")
+    # Uploads are saved through secure_filename, so this only rejects paths
+    # that point outside /data/maps.
+    name = secure_filename(request.form.get("name") or "")
     tags = request.form.get("tags") or request.form.get("tag")
     location = request.form.get("locations") or request.form.get("location")
     mapToMake = {

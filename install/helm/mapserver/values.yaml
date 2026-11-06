@@ -22,6 +22,11 @@ terracotta:
   publicUrl: http://localhost:5001
   dbPath: /data/db/terracotta.sqlite
   provider: sqlite
+  # Web pages allowed to load tiles. Terracotta's default is localhost only,
+  # which makes the ollebo.com dashboards fail with a CORS error.
+  allowedOrigins:
+    - https://dash.ollebo.com
+    - https://dash.northamlin.com
 
 # One Service exposes both container ports.
 service:

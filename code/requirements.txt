@@ -1,7 +1,9 @@
+# numpy<2 (and rasterio<1.5) keeps pip's numpy ABI-compatible with the
+# apt-installed python3-gdal. Without it gdal_calc.py can't import gdal_array.
+numpy<2
+rasterio==1.4.3
+terracotta==0.10.1
 flask
 flask_cors
-ninja2
-geotiff
-rasterio
 names
 requests

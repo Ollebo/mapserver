@@ -54,13 +54,23 @@ def getGeoTiffData(tiff_file):
 
 
 def _tile_url(space_id, map_id, spec):
-    base = "singleband" if spec.singleband else "rgb"
-    url = "{0}/{1}/{2}/{3}/{4}/{{z}}/{{x}}/{{y}}.png".format(
-        config.terracotta_public_url(), base, space_id, map_id, spec.name
-    )
-    if spec.colormap and spec.singleband:
-        url += "?colormap=" + spec.colormap
-    return url
+    base_url = config.terracotta_public_url()
+    # Explicit ranges match the 8-bit COGs and the URLs map-maker produces.
+    if spec.singleband:
+        url = "{0}/singleband/{1}/{2}/{3}/{{z}}/{{x}}/{{y}}.png".format(
+            base_url, space_id, map_id, spec.name
+        )
+        params = []
+        if spec.colormap:
+            params.append("colormap=" + spec.colormap)
+        params.append("stretch_range=[0,255]")
+        return url + "?" + "&".join(params)
+    # RGB composite: three single-band datasets named <name>__r/_g/_b.
+    return (
+        "{0}/rgb/{1}/{2}/{{z}}/{{x}}/{{y}}.png"
+        "?r={3}__r&g={3}__g&b={3}__b"
+        "&r_range=[0,255]&g_range=[0,255]&b_range=[0,255]"
+    ).format(base_url, space_id, map_id, spec.name)
 
 
 def makingTiles(map):
@@ -79,11 +89,12 @@ def makingTiles(map):
 
     variants_meta = []
     for spec in VARIANTS[input_type]:
-        cog_path = os.path.join(cog_out_dir, "{0}.tif".format(spec.name))
         status = "ok"
         try:
-            spec.build(source_path, cog_path, bands)
-            terracotta_client.register(space_id, map_id, spec.name, cog_path)
+            # One variant can produce several datasets (RGB is one per channel).
+            outputs = spec.build(source_path, cog_out_dir, spec.name, bands)
+            for variant_key, cog_path in outputs.items():
+                terracotta_client.register(space_id, map_id, variant_key, cog_path)
         except Exception as e:
             print("variant {0} failed: {1}".format(spec.name, e))
             status = "failed"
