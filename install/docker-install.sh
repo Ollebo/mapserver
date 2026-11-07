@@ -65,7 +65,7 @@ if [[ "$skip_prompts" -eq 0 ]]; then
   prompt TERRACOTTA_PUBLIC_URL \
                            "TERRACOTTA_PUBLIC_URL (browser-facing tile URL; use your ngrok/cloudflared https URL if exposing externally)" \
                            "http://localhost:5001"
-  prompt API               "API (ollebo.com API base)" "https://www.ollebo.com/api/v1"
+  prompt API               "API (ollebo.com API base)" "https://www.ollebo.com/api"
 
   cat > "$env_file" <<EOF
 # Written by install/docker-install.sh

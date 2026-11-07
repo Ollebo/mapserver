@@ -35,7 +35,6 @@ terracotta.publicUrl to a publicly resolvable URL.
 
 {{- if not .Values.ollebo.key }}
 
-NOTE: ollebo.key is empty. The mapserver runs fine without it. Pairing with
-ollebo.com isn't built yet, so setting a key does not link the two, and the
-Settings page will show Disconnected either way.
+NOTE: ollebo.key is empty. The mapserver runs fine, but your maps won't appear
+on ollebo.com until you add a key with --set ollebo.key or on the Settings page.
 {{- end }}

@@ -11,7 +11,7 @@ services:
     ports:
       - 8888:8080
     environment:
-      - API=${API:-https://www.ollebo.com/api/v1}
+      - API=${API:-https://www.ollebo.com/api}
       - OLLEBO_KEY=${OLLEBO_KEY:-}
       - OLLEBO_SPACE_ID=${OLLEBO_SPACE_ID:-local}
       - TERRACOTTA_DB_PATH=${TERRACOTTA_DB_PATH:-/data/db/terracotta.sqlite}
