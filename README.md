@@ -35,13 +35,12 @@ ollebo.com only ever sees URLs that point at your mapserver. The raster pixels s
 
 1. Sign in at [ollebo.com](https://ollebo.com).
 2. Create a mapserver entry in the space you want to expose maps to. ollebo.com generates a unique key.
-3. Copy that key and set it as the `OLLEBO_KEY` environment variable on this server (the install scripts below prompt you for it).
-4. Set `OLLEBO_SPACE_ID` to the space ID ollebo.com shows you. This becomes the first key in the terracotta `[space, map, variant]` schema, so it scopes every tile URL to your space.
+3. Paste that key into this server's **Settings** page, or set it as `OLLEBO_KEY` (the install scripts below prompt you for it). The key decides which space your maps appear in.
+4. Set the public tile URL. Maps that are already built are sent to ollebo.com when you save Settings, and new maps are sent when they finish.
 
-Everyone in that space on ollebo.com can then see your maps the same way you do.
+Everyone in that space on ollebo.com can then see your maps, as long as their browser can reach your public tile URL. If you delete a map on ollebo.com, it comes back the next time this server rescans or you save Settings.
 
-> **Status — pairing isn't built yet.**
-> ollebo.com issues the key, but nothing on ollebo.com accepts it yet, so the Settings page shows Disconnected even with a valid key. The mapserver does not call back to ollebo.com to register itself. Until then, maps are visible through the local UI at `http://localhost:8888` but won't appear on ollebo.com automatically.
+> **Maps are private on ollebo.com, but the tile server has no login.** Only your space lists them, yet anyone who has a tile URL can fetch the tiles.
 
 ## External reachability
 
@@ -116,7 +115,7 @@ Key `values.yaml` knobs:
 | Value | What it controls |
 |---|---|
 | `image.repository`, `image.tag` | Image to deploy. Defaults to the chart's `appVersion`. Set `latest` for the newest build of `main`, or `sha-<short>` for a specific commit. |
-| `ollebo.key` | Stored in a Secret. Pairing with ollebo.com isn't built yet. |
+| `ollebo.key` | Your map key from ollebo.com, stored in a Secret. |
 | `ollebo.spaceId`, `ollebo.apiUrl` | Non-sensitive config, stored in a ConfigMap. |
 | `terracotta.publicUrl` | Public URL for tile fetches — must match your Ingress host. |
 | `ingress.enabled`, `ingress.host`, `ingress.className`, `ingress.tlsSecret` | Ingress wiring. |
@@ -132,14 +131,14 @@ After install, `helm get notes mapserver` prints the resolved tile URL and a `ku
 
 ## Configuration reference
 
-These are the environment variables actually consumed by code (and one that's reserved for future use):
+These are the environment variables consumed by code:
 
 | Variable | Default | Notes |
 |---|---|---|
-| `OLLEBO_KEY` | _(empty)_ | **Reserved** — paired with an ollebo.com space. Not yet read by code. Set it now anyway. |
-| `OLLEBO_SPACE_ID` | `local` | Tenant scope. First key in the terracotta `[space, map, variant]` schema. |
+| `OLLEBO_KEY` | _(empty)_ | Your map key from ollebo.com. A key saved on the Settings page takes priority. |
+| `OLLEBO_SPACE_ID` | `local` | First key in the terracotta `[space, map, variant]` schema. It doesn't need to match your ollebo.com space. |
 | `TERRACOTTA_PUBLIC_URL` | `http://localhost:5001` | Browser-facing tile URL. Must be reachable from any viewer. |
-| `API` | `https://www.ollebo.com/api/v1` | ollebo.com API base. Used by the dormant `updateMap()` registration call. |
+| `API` | `https://www.ollebo.com/api` | ollebo.com API base. Where this server checks its key and registers maps. |
 | `TERRACOTTA_DB_PATH` | `/data/db/terracotta.sqlite` | SQLite location inside the container. |
 | `TERRACOTTA_PROVIDER` | `sqlite` | terracotta driver. Only `sqlite` is exercised today. |
 
@@ -165,7 +164,6 @@ Pull requests build the image for verification but don't push. The Docker instal
 ## Known rough edges
 
 - **No auth on the tile server.** See "External reachability."
-- **Pairing with ollebo.com isn't built.** See the pairing section above.
 - **No login on the web UI.** It can upload files and show the map key, so keep it private.
 - **Single-replica only on Kubernetes** because of SQLite + RWO PVCs.
 - **Container build is fragile.** `Dockerfile_build` uses `--break-system-packages` on Ubuntu 24.04 with pinned `terracotta==0.10.1`. A move to a venv-based image is on the roadmap; for now, rebuild from the pinned base if pip breakage occurs.

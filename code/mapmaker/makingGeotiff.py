@@ -2,21 +2,16 @@ import os
 
 import rasterio
 from rasterio.warp import transform_bounds
-import requests
 
 import config
+import ollebo
 from mapmaker.maps import terracotta_client
 from mapmaker.maps.detect import detect_input_type
 from mapmaker.maps.variants import VARIANTS
 
 
-API_URL = os.environ.get("API", "https://www.ollebo.com/api/v1")
 SOURCE_DIR = "/data/maps"
 COG_DIR = "/data/cogs"
-
-
-def updateMap(map):
-    return requests.post("{0}/maps/".format(API_URL), json=map)
 
 
 def getGeoTiffData(tiff_file):
@@ -141,11 +136,80 @@ def makingMap(map):
     elif len(successful) < len(variants_meta):
         map["action"] = "partial"
 
-    # ollebo.com sync — left dormant; will be wired up in a follow-up.
-    # updateMap(map)
+    if successful:
+        ollebo.register_map(map_id, _registration(
+            map_id, map.get("tags"), map["tilesURL"], variants_meta, map["mapData"]
+        ))
 
     print(map)
     return map
+
+
+def _registration(map_id, tags, tiles_url, variants, map_data):
+    return {
+        "mapData": map_data,
+        "name": map_id,
+        "tags": tags or "",
+        "tilesURL": tiles_url,
+        "variants": variants,
+    }
+
+
+def _registered_variants(space_id, map_id):
+    """The VARIANTS names this map has datasets for. RGB is stored as rgb__r/g/b."""
+    driver = terracotta_client._driver()
+    with driver.connect():
+        if not driver.key_names:
+            return set()
+        datasets = driver.get_datasets(where={"space": space_id, "map": map_id})
+    names = set()
+    for key_tuple in datasets.keys():
+        keys = dict(zip(driver.key_names, key_tuple))
+        names.add(keys["variant"].split("__")[0])
+    return names
+
+
+def sync_with_ollebo():
+    """Tell ollebo.com the public URL and every map already built here.
+
+    For maps built before a key was set, and for updating tile URLs after the
+    public URL changes. Returns (registered, failed).
+    """
+    registered, failed = 0, 0
+    if not ollebo.save_public_url():
+        return registered, failed
+
+    space_id = os.environ.get("OLLEBO_SPACE_ID", "local")
+    map_ids = sorted(_registered_map_ids(space_id))
+    for map_id in map_ids:
+        try:
+            source_path = os.path.join(SOURCE_DIR, map_id + ".tif")
+            input_type, _ = detect_input_type(source_path)
+            built = _registered_variants(space_id, map_id)
+            variants = [
+                {
+                    "variant": spec.name,
+                    "tilesURL": _tile_url(space_id, map_id, spec),
+                    "colormap": spec.colormap,
+                    "singleband": spec.singleband,
+                    "status": "ok",
+                }
+                for spec in VARIANTS[input_type]
+                if spec.name in built
+            ]
+            sent = bool(variants) and ollebo.register_map(map_id, _registration(
+                map_id, "", variants[0]["tilesURL"], variants, getGeoTiffData(source_path)
+            ))
+        except Exception as e:
+            print("sync: {0} failed: {1}".format(map_id, e))
+            sent = False
+        if sent:
+            registered += 1
+        else:
+            failed += 1
+
+    print("sync: registered={0} failed={1}".format(registered, failed))
+    return registered, failed
 
 
 def _registered_map_ids(space_id):
