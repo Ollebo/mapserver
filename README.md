@@ -40,8 +40,8 @@ ollebo.com only ever sees URLs that point at your mapserver. The raster pixels s
 
 Everyone in that space on ollebo.com can then see your maps the same way you do.
 
-> **Status — `OLLEBO_KEY` is reserved, not yet consumed.**
-> The mapserver does not currently call back to ollebo.com to register itself. Set the key now so your config is ready; the registration handshake activates in a future release. Until then, maps are visible through the local UI at `http://localhost:8888` but won't appear on ollebo.com automatically.
+> **Status — pairing isn't built yet.**
+> ollebo.com issues the key, but nothing on ollebo.com accepts it yet, so the Settings page shows Disconnected even with a valid key. The mapserver does not call back to ollebo.com to register itself. Until then, maps are visible through the local UI at `http://localhost:8888` but won't appear on ollebo.com automatically.
 
 ## External reachability
 
@@ -56,7 +56,7 @@ ngrok http 5001
 
 Re-run the install script (or edit `.env`) with the new URL and `docker compose up -d` again.
 
-**Kubernetes install — use an Ingress.** The Helm chart ships an optional Ingress (`--set ingress.enabled=true --set ingress.host=tiles.example.com`). Put it behind a public DNS name with TLS. For high-traffic installs, add a CDN (CloudFront, Cloudflare, Fastly) in front of the Ingress.
+**Kubernetes install — use an Ingress.** The Helm chart ships an optional Ingress (`--set ingress.enabled=true --set ingress.host=tiles.example.com`). It publishes the tile routes only; the web UI has no login, so it stays private unless you set `ingress.exposeUi=true`. Put it behind a public DNS name with TLS. For high-traffic installs, add a CDN (CloudFront, Cloudflare, Fastly) in front of the Ingress.
 
 > The tile server has **no authentication** today. Anything that can reach `TERRACOTTA_PUBLIC_URL` can request tiles. Treat the URL as a shared secret, put it behind a network policy, or wait for the auth module on the roadmap.
 
@@ -101,7 +101,7 @@ To change configuration, edit `.env` and re-run `docker compose up -d` — no ne
 For a hosted install on a cloud provider — bigger map catalog, multiple users, public Ingress.
 
 ```sh
-helm install mapserver install/helm/mapserver \
+helm install mapserver oci://ghcr.io/ollebo/charts/mapserver \
   --set ollebo.key=YOUR_KEY \
   --set ollebo.spaceId=YOUR_SPACE_ID \
   --set ingress.enabled=true \
@@ -115,11 +115,12 @@ Key `values.yaml` knobs:
 
 | Value | What it controls |
 |---|---|
-| `image.repository`, `image.tag` | Image to deploy. Defaults to `ghcr.io/ollebo/mapserver:latest` (built and published by CI on every push to `main`). Pin to `sha-<short>` or a `vX.Y.Z` release tag for a stable rollout. |
-| `ollebo.key` | Stored in a Secret. Reserved for future ollebo.com registration. |
+| `image.repository`, `image.tag` | Image to deploy. Defaults to the chart's `appVersion`. Set `latest` for the newest build of `main`, or `sha-<short>` for a specific commit. |
+| `ollebo.key` | Stored in a Secret. Pairing with ollebo.com isn't built yet. |
 | `ollebo.spaceId`, `ollebo.apiUrl` | Non-sensitive config, stored in a ConfigMap. |
 | `terracotta.publicUrl` | Public URL for tile fetches — must match your Ingress host. |
 | `ingress.enabled`, `ingress.host`, `ingress.className`, `ingress.tlsSecret` | Ingress wiring. |
+| `ingress.exposeUi` | Also publish the web UI. Off by default because it has no login. |
 | `persistence.{maps,cogs,db}.size` | PVC size per dataset folder. |
 | `persistence.{maps,cogs,db}.storageClassName` | Per-PVC StorageClass override. |
 
@@ -156,14 +157,16 @@ CI (`.github/workflows/docker-publish.yml`) builds `Dockerfile_build` on every p
 
 - `ghcr.io/ollebo/mapserver:latest` — current `main`.
 - `ghcr.io/ollebo/mapserver:sha-<short>` — pinned to a specific commit.
-- `ghcr.io/ollebo/mapserver:vX.Y.Z` — on git tags matching `v*.*.*`.
+- `ghcr.io/ollebo/mapserver:X.Y.Z` — on git tags matching `v*.*.*`.
+- `oci://ghcr.io/ollebo/charts/mapserver` version `X.Y.Z` — the Helm chart, on the same git tags, after its image has been published.
 
-Pull requests build the image for verification but don't push. The Docker install script builds locally from `Dockerfile_build`; the Helm chart pulls `ghcr.io/ollebo/mapserver:latest` by default.
+Pull requests build the image for verification but don't push. The Docker install script builds locally from `Dockerfile_build`; the Helm chart runs the image matching its release by default.
 
 ## Known rough edges
 
 - **No auth on the tile server.** See "External reachability."
-- **`OLLEBO_KEY` is dormant.** See the pairing section above.
+- **Pairing with ollebo.com isn't built.** See the pairing section above.
+- **No login on the web UI.** It can upload files and show the map key, so keep it private.
 - **Single-replica only on Kubernetes** because of SQLite + RWO PVCs.
 - **Container build is fragile.** `Dockerfile_build` uses `--break-system-packages` on Ubuntu 24.04 with pinned `terracotta==0.10.1`. A move to a venv-based image is on the roadmap; for now, rebuild from the pinned base if pip breakage occurs.
 - **Dev bind-mount is in a separate file.** `docker-compose.yaml` deploys the baked-in image. `docker-compose.override.yaml` adds the `./code:/code` live-reload mount and is auto-merged by `docker compose` when present. Delete it before publishing an image to production.

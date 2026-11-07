@@ -2,15 +2,22 @@ OlleBo Mapserver installed as release: {{ .Release.Name }}
 
 {{- if .Values.ingress.enabled }}
 
-Tile URL (public):
-  https://{{ .Values.ingress.host }}{{ .Values.ingress.paths.terracotta }}
-
-Web UI:
-  https://{{ .Values.ingress.host }}{{ .Values.ingress.paths.flask }}
+Tile server (public):
+  https://{{ .Values.ingress.host }}
 
 Make sure DNS for {{ .Values.ingress.host }} points at your Ingress controller's
-external IP, and that `terracotta.publicUrl` in values.yaml matches the public
-tile URL above.
+external IP, and that `terracotta.publicUrl` is set to the URL above.
+
+{{- if .Values.ingress.exposeUi }}
+
+WARNING: ingress.exposeUi is on. The web UI has no login, so anyone who can
+reach it can upload files and read the map key. Put authentication in front.
+{{- else }}
+
+The web UI is not public. Reach it with port-forward:
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "mapserver.fullname" . }} 8888:{{ .Values.service.flaskPort }}
+Then open http://localhost:8888
+{{- end }}
 {{- else }}
 
 No Ingress was created. Reach the services with port-forward:
@@ -28,8 +35,7 @@ terracotta.publicUrl to a publicly resolvable URL.
 
 {{- if not .Values.ollebo.key }}
 
-WARNING: ollebo.key is empty. The mapserver runs fine, but it has no key to
-pair with an ollebo.com space. Set --set ollebo.key=YOUR_KEY when you have one.
-The registration handshake isn't wired up in code yet; this is preparation for
-a future release.
+NOTE: ollebo.key is empty. The mapserver runs fine without it. Pairing with
+ollebo.com isn't built yet, so setting a key does not link the two, and the
+Settings page will show Disconnected either way.
 {{- end }}
