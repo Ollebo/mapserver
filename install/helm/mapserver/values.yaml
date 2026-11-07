@@ -2,7 +2,9 @@
 
 image:
   repository: ghcr.io/ollebo/mapserver
-  tag: latest
+  # Empty means the chart's appVersion, so a chart release always runs the
+  # image it was published with.
+  tag: ""
   pullPolicy: IfNotPresent
   pullSecrets: []
 
@@ -17,8 +19,8 @@ ollebo:
 
 terracotta:
   # Browser-facing tile URL. Must be reachable from any viewer (including
-  # ollebo.com). When ingress.enabled=true, set this to the same scheme+host
-  # as ingress.host.
+  # ollebo.com). When ingress.enabled=true, set this to https://<ingress.host>,
+  # with no path.
   publicUrl: http://localhost:5001
   dbPath: /data/db/terracotta.sqlite
   provider: sqlite
@@ -34,18 +36,21 @@ service:
   flaskPort: 8080
   terracottaPort: 5000
 
-# Optional public Ingress in front of both ports.
-# The default rule routes / to the Flask UI and /tiles to terracotta. Adjust
-# `paths` if your Ingress controller needs different path semantics.
+# Optional public Ingress. It publishes the tile routes only. The web UI has no
+# login and can upload files and show the map key, so it stays private unless
+# you set exposeUi=true, and then only behind your own authentication.
 ingress:
   enabled: false
   className: ""
   host: tiles.example.com
   tlsSecret: ""
   annotations: {}
+  exposeUi: false
   paths:
     flask: /
-    terracotta: /tiles
+    terracotta:
+      - /rgb
+      - /singleband
 
 # Three independent PVCs back the three data directories.
 persistence:
