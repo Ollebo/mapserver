@@ -8,8 +8,9 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
 import config
+import ollebo
 from listMaps import listFiles, variants_for_map
-from mapmaker.makingGeotiff import makingMap, scan_and_ingest
+from mapmaker.makingGeotiff import makingMap, scan_and_ingest, sync_with_ollebo
 
 
 UPLOAD_FOLDER = "/data/maps"
@@ -53,6 +54,7 @@ def map():
 @app.route("/rescan", methods=["POST"])
 def rescan():
     scan_and_ingest()
+    sync_with_ollebo()
     return redirect("/")
 
 
@@ -82,9 +84,10 @@ def settings():
             "terracotta_public_url",
             request.form.get("terracotta_public_url", "").strip(),
         )
-        return redirect("/settings")
+        registered, failed = sync_with_ollebo()
+        return redirect("/settings?registered={0}&failed={1}".format(registered, failed))
 
-    connected, status_detail = config.check_connection()
+    connected, status_detail = ollebo.check_connection()
     return render_template(
         "settings.html",
         title="Settings",
@@ -92,6 +95,8 @@ def settings():
         terracotta_public_url=config.terracotta_public_url(),
         connected=connected,
         status_detail=status_detail,
+        registered=request.args.get("registered", type=int),
+        failed=request.args.get("failed", type=int),
     )
 
 

@@ -1,8 +1,6 @@
 import os
 import sqlite3
 
-import requests
-
 
 DB_PATH = os.environ.get("TERRACOTTA_DB_PATH", "/data/db/terracotta.sqlite")
 
@@ -64,21 +62,4 @@ def terracotta_public_url():
 
 
 def api_url():
-    return os.environ.get("API", "https://www.ollebo.com/api/v1")
-
-
-def check_connection(timeout=5):
-    key = ollebo_key()
-    if not key:
-        return False, "No map key configured"
-    try:
-        resp = requests.get(
-            api_url(),
-            headers={"Authorization": "Bearer " + key},
-            timeout=timeout,
-        )
-        if 200 <= resp.status_code < 400:
-            return True, "HTTP {0}".format(resp.status_code)
-        return False, "HTTP {0}".format(resp.status_code)
-    except requests.RequestException as e:
-        return False, str(e)
+    return os.environ.get("API", "https://www.ollebo.com/api")

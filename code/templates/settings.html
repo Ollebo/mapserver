@@ -6,13 +6,19 @@
   {% if connected %}
     <div class="mb-6 inline-flex items-center px-3 py-1.5 rounded-full bg-green-100 text-green-800 text-sm font-medium">
       <span class="w-2 h-2 mr-2 rounded-full bg-green-500"></span>
-      Connected to ollebo.com
+      Connected to ollebo.com{% if status_detail %} — {{ status_detail }}{% endif %}
     </div>
   {% else %}
     <div class="mb-6 inline-flex items-center px-3 py-1.5 rounded-full bg-red-100 text-red-800 text-sm font-medium">
       <span class="w-2 h-2 mr-2 rounded-full bg-red-500"></span>
       Disconnected{% if status_detail %} — {{ status_detail }}{% endif %}
     </div>
+  {% endif %}
+
+  {% if registered or failed %}
+    <p class="mb-6 text-sm text-gray-700">
+      Sent {{ registered or 0 }} map(s) to ollebo.com{% if failed %}. {{ failed }} failed; see the server log{% endif %}.
+    </p>
   {% endif %}
 
   <form method="post" action="/settings" class="space-y-6">
