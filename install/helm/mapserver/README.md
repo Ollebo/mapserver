@@ -2,7 +2,7 @@
 
 Deploys the OlleBo mapserver (Flask uploader + terracotta tile server) onto a Kubernetes cluster as a single Pod with two containers, backed by three PVCs.
 
-For onboarding, env vars, and architecture, see the [top-level README](../../../README.md). This file is a chart-scoped reference.
+For what the mapserver does, how it connects to ollebo.com and the authentication you must add yourself, see the [top-level README](../../../README.md). This file is a chart reference.
 
 ## Quick install
 
@@ -17,7 +17,7 @@ helm install mapserver oci://ghcr.io/ollebo/charts/mapserver \
 
 ## Topology
 
-- **One Pod, two containers**: `map-server` (Flask, port 8080) + `terracotta` (port 5000).
+- **One Pod, two containers**: `map-server` (Flask under gunicorn, port 8080) + `terracotta` (gunicorn, port 5000, `terracotta.workers` processes).
 - **One initContainer**: `terracotta-init` runs `ensure_schema()` against the SQLite DB so terracotta starts with a populated schema.
 - **Three PVCs**: `-maps`, `-cogs`, `-db`. Independently sized and class-able via `persistence.{name}.size` / `persistence.{name}.storageClassName`.
 - **One Service** with two named ports (`flask`, `terracotta`).
