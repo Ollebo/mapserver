@@ -1,1 +1,0 @@
-# This is the locations where map will be shared and saved for the webserver

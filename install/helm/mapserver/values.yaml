@@ -23,6 +23,8 @@ terracotta:
   # with no path.
   publicUrl: http://localhost:5001
   dbPath: /data/db/terracotta.sqlite
+  # Tile server processes. Each one renders tiles in parallel with the others.
+  workers: 4
   provider: sqlite
   # Web pages allowed to load tiles. Terracotta's default is localhost only,
   # which makes the ollebo.com dashboards fail with a CORS error.

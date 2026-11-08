@@ -33,6 +33,7 @@ services:
     environment:
       - TERRACOTTA_DB_PATH=${TERRACOTTA_DB_PATH:-/data/db/terracotta.sqlite}
       - TERRACOTTA_PROVIDER=${TERRACOTTA_PROVIDER:-sqlite}
+      - TC_DRIVER_PATH=${TERRACOTTA_DB_PATH:-/data/db/terracotta.sqlite}
       - TC_ALLOWED_ORIGINS_TILES=["https://dash.ollebo.com","https://dash.northamlin.com"]
     working_dir: /code
-    command: ["sh", "-c", "mkdir -p /data/db && python3 -c 'from mapmaker.maps import terracotta_client; terracotta_client.ensure_schema()' && terracotta serve -d /data/db/terracotta.sqlite --allow-all-ips --port 5000"]
+    command: ["sh", "-c", "mkdir -p /data/db && python3 -c 'from mapmaker.maps import terracotta_client; terracotta_client.ensure_schema()' && exec gunicorn --bind 0.0.0.0:5000 --workers 4 terracotta.server.app:app"]

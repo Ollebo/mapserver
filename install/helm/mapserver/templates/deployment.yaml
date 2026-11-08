@@ -92,11 +92,14 @@ spec:
           command:
             - sh
             - -c
-            - terracotta serve -d {{ .Values.terracotta.dbPath }} --allow-all-ips --port 5000
+            - exec gunicorn --bind 0.0.0.0:5000 --workers {{ .Values.terracotta.workers }} terracotta.server.app:app
           ports:
             - name: terracotta
               containerPort: 5000
               protocol: TCP
+          env:
+            - name: TC_DRIVER_PATH
+              value: {{ .Values.terracotta.dbPath | quote }}
           envFrom:
             - configMapRef:
                 name: {{ include "mapserver.fullname" . }}

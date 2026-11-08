@@ -1,81 +1,78 @@
 # OlleBo Mapserver
 
-A self-hosted bridge between your private GeoTIFF imagery and the [ollebo.com](https://ollebo.com) cloud UI.
+Host your own drone and satellite maps, and show them in [ollebo.com](https://www.ollebo.com) without uploading the imagery.
 
-You run this server on your own machine or cluster. It ingests `.tif` uploads, generates Cloud-Optimized GeoTIFF (COG) variants, and serves them as map tiles. When you pair it with an OlleBo space, the ollebo.com UI displays the maps by pointing its tile requests directly at your server — **the imagery itself never leaves your infrastructure.**
+You run the mapserver on your own machine or Kubernetes cluster. It turns GeoTIFF files into map tiles and serves them from your own servers. It tells ollebo.com which maps exist and where their tiles are, so they show up in your Space next to everything else. The map images stay on your servers. Viewers' browsers load the tiles straight from your server.
 
-## What it can do
+> **You need your own authentication.** The mapserver has no login. Before you expose it to the internet, put it behind your own access control. See [Authentication is your job](#authentication-is-your-job).
 
-- Upload `.tif` files through a built-in web UI.
-- Auto-detect the source as `rgb`, `multispectral`, or `dem` and generate the right COG variants:
-  - **rgb** → `rgb`, `grayscale`
-  - **multispectral** → `rgb`, `grayscale`, `ndvi`
-  - **dem** → `hillshade`, `color-relief`, `slope`
-- Serve the resulting variants as standard XYZ map tiles via [terracotta](https://terracotta-python.readthedocs.io/).
-- Display a single map with a Leaflet viewer and a variant picker.
-- Act as a registered tile origin for ollebo.com so private imagery is reachable from the cloud UI without ever uploading it.
+## What it does
 
-## How it fits with ollebo.com
+- **Turns GeoTIFFs into maps.** Upload a `.tif` in the web UI, or drop it in the maps folder. The mapserver detects what kind of image it is and builds the right views:
+
+  | Source | Views it builds |
+  |---|---|
+  | RGB photo (orthophoto) | `rgb`, `grayscale` |
+  | Multispectral | `rgb`, `grayscale`, `ndvi` |
+  | Elevation model (DEM) | `hillshade`, `color-relief`, `slope` |
+
+- **Serves map tiles.** Each view is served as standard XYZ tiles (`/{z}/{x}/{y}.png`). Tiles are rendered on request from Cloud-Optimized GeoTIFFs (COGs), so nothing is pre-generated.
+- **Connects to your ollebo.com Space with a map key.** Every finished map is listed in that Space, private to its members.
+- **Has a local viewer.** The built-in web UI shows each map with a view picker, so you can check a map before anyone else sees it.
+
+## How it works
 
 ```
-   Browser ──► ollebo.com (UI)
-                   │
-                   │ tile URLs point at YOUR mapserver
-                   ▼
-           Your mapserver (this repo)
-                   │
-                   ├── /data/maps   (source .tif — your storage)
-                   ├── /data/cogs   (generated COG variants)
-                   └── /data/db     (terracotta SQLite)
+                    ┌──────────────── your infrastructure ────────────────┐
+                    │                                                     │
+  .tif upload ────► │  Web UI (Flask, :8080)                              │
+                    │    1. detect the image type                         │
+                    │    2. build COG views     ──►  /data/cogs           │
+                    │    3. add them to the tile store ──► /data/db       │
+                    │                                                     │
+                    │  Tile server (Terracotta, :5000)  ◄── tile requests │
+                    └───────────────┬─────────────────────────▲───────────┘
+                                    │ 4. register map         │ 5. browser loads
+                                    │    (name, bounds,       │    tiles directly
+                                    │    tile URL, views)     │    from your server
+                                    ▼                         │
+                         ollebo.com API ───── lists map ──► dash.ollebo.com
 ```
 
-ollebo.com only ever sees URLs that point at your mapserver. The raster pixels stream from your hardware to the viewer's browser. You stay in control of the data.
+1. **Detect.** The mapserver opens the GeoTIFF and decides whether it is RGB, multispectral or an elevation model.
+2. **Build.** It runs GDAL to write one Cloud-Optimized GeoTIFF per view into `/data/cogs`.
+3. **Index.** It adds each COG to Terracotta's tile store (an SQLite file in `/data/db`).
+4. **Register.** It sends ollebo.com the map's name, bounds, views and public tile URL. It authenticates with your map key. Only this description is sent; the imagery never is.
+5. **View.** Members of your Space see the map in ollebo.com. Their browsers fetch the tiles from your public tile URL.
 
-## Pairing with an ollebo.com space
+The mapserver keeps working when ollebo.com can't be reached. Maps still build and show in the local viewer, and they are sent again the next time you save Settings or click Rescan.
 
-1. Sign in at [ollebo.com](https://ollebo.com).
-2. Create a mapserver entry in the space you want to expose maps to. ollebo.com generates a unique key.
-3. Paste that key into this server's **Settings** page, or set it as `OLLEBO_KEY` (the install scripts below prompt you for it). The key decides which space your maps appear in.
-4. Set the public tile URL. Maps that are already built are sent to ollebo.com when you save Settings, and new maps are sent when they finish.
+## Authentication is your job
 
-Everyone in that space on ollebo.com can then see your maps, as long as their browser can reach your public tile URL. If you delete a map on ollebo.com, it comes back the next time this server rescans or you save Settings.
+The mapserver has **no login and no access control of its own**. Plan for this before you install.
 
-> **Maps are private on ollebo.com, but the tile server has no login.** Only your space lists them, yet anyone who has a tile URL can fetch the tiles.
+**The web UI (port 8080)** can upload files, rebuild maps and show your map key. Never expose it publicly. Keep it on a private network, a VPN, or a `kubectl port-forward`. If people need it remotely, put it behind your own sign-in, for example oauth2-proxy, Cloudflare Access, your Ingress controller's authentication, or your company's SSO gateway. The Helm chart keeps the UI off the Ingress unless you set `ingress.exposeUi=true`.
 
-## External reachability
+**The tile server (port 5000)** has to be reachable by the browsers of everyone who views your maps. Anyone who can reach it and knows a map's tile URL can load its tiles. ollebo.com only lists your maps to members of your Space, but it does not protect the tile server itself.
 
-For ollebo.com (and anyone viewing maps through it) to fetch tiles from your server, the terracotta tile URL (`TERRACOTTA_PUBLIC_URL`) must be reachable from the public internet.
+The ollebo.com map viewer fetches your tiles without cookies or login headers, so a login page in front of the tile server will stop tiles from showing. Protect the tile server with network-level rules instead:
+- an IP allowlist for your offices
+- a VPN that your viewers are connected to
+- a firewall or network policy
 
-**Local install — use a tunnel.** [ngrok](https://ngrok.com), [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/), or a similar service. With ngrok:
+If none of that fits, at least treat the tile hostname as unlisted.
 
-```sh
-ngrok http 5001
-# copy the https URL ngrok prints and set it as TERRACOTTA_PUBLIC_URL
-```
+You are responsible for securing your installation and the data on it.
 
-Re-run the install script (or edit `.env`) with the new URL and `docker compose up -d` again.
+## Need help hosting it?
 
-**Kubernetes install — use an Ingress.** The Helm chart ships an optional Ingress (`--set ingress.enabled=true --set ingress.host=tiles.example.com`). It publishes the tile routes only; the web UI has no login, so it stays private unless you set `ingress.exposeUi=true`. Put it behind a public DNS name with TLS. For high-traffic installs, add a CDN (CloudFront, Cloudflare, Fastly) in front of the Ingress.
-
-> The tile server has **no authentication** today. Anything that can reach `TERRACOTTA_PUBLIC_URL` can request tiles. Treat the URL as a shared secret, put it behind a network policy, or wait for the auth module on the roadmap.
-
-## Storage layout
-
-Three folders, all mountable as volumes:
-
-| Path | Purpose |
-|---|---|
-| `maps/` → `/data/maps` | Source `.tif` uploads — the only thing you supply. |
-| `cogs/` → `/data/cogs` | Generated Cloud-Optimized GeoTIFF variants, keyed `<space>/<map>/<variant>.tif`. |
-| `db/`   → `/data/db`   | terracotta's SQLite metadata (`terracotta.sqlite`). |
-
-Tiles are computed on the fly by terracotta from the COGs in `cogs/`; nothing is pre-rendered.
+If you'd rather not run it yourself, our partner **[Ankra](https://ankra.io)** can host and run the mapserver for you, in **Sweden** or the **US**. Contact them through [ankra.io](https://ankra.io).
 
 ---
 
-## Install — Docker (local)
+## Quick start: Docker
 
-For a single machine, a personal install, or evaluation. You drop `.tif` files into `maps/`, upload them through the web UI, and they appear in your OlleBo space.
+For one machine, a trial, or a small install.
 
 ```sh
 git clone https://github.com/ollebo/mapserver.git
@@ -83,88 +80,117 @@ cd mapserver
 bash install/docker-install.sh
 ```
 
-The script:
+The script checks for `docker` and `docker compose`. It asks for your map key and public tile URL and writes them to `.env`. Then it creates the `maps/`, `cogs/` and `db/` folders and starts the stack.
 
-1. Checks that `docker` and `docker compose` are installed.
-2. Prompts for `OLLEBO_KEY`, `OLLEBO_SPACE_ID`, `TERRACOTTA_PUBLIC_URL`, and `API`.
-3. Writes a `.env` file in the repo root.
-4. Creates `maps/`, `cogs/`, `db/` host directories.
-5. Runs `docker compose up -d --build`.
+Open `http://localhost:8888` and upload a `.tif`. The tiles are on `http://localhost:5001`.
 
-When it finishes you can open `http://localhost:8888` and start uploading. Stop the stack with `docker compose down`; restart it with `docker compose up -d`.
+- **Change settings:** edit `.env`, then run `docker compose up -d`.
+- **Stop:** `docker compose down`.
+- **Your files:** they stay in `maps/`, `cogs/` and `db/`.
 
-To change configuration, edit `.env` and re-run `docker compose up -d` — no need to re-run the install script.
+`docker-compose.override.yaml` mounts `./code` into the containers for live editing. Docker Compose loads it automatically. Delete it if you only want to run the built image.
 
-## Install — Kubernetes (Helm)
+## Install: Kubernetes (Helm)
 
-For a hosted install on a cloud provider — bigger map catalog, multiple users, public Ingress.
+For a permanent install with a public tile hostname.
 
 ```sh
 helm install mapserver oci://ghcr.io/ollebo/charts/mapserver \
-  --set ollebo.key=YOUR_KEY \
-  --set ollebo.spaceId=YOUR_SPACE_ID \
+  --namespace mapserver --create-namespace \
+  --set ollebo.key=YOUR_MAP_KEY \
   --set ingress.enabled=true \
   --set ingress.host=tiles.example.com \
+  --set ingress.tlsSecret=tiles-example-com-tls \
   --set terracotta.publicUrl=https://tiles.example.com
 ```
 
-The chart deploys **one Pod with two containers** (Flask + terracotta) plus an initContainer that creates the terracotta SQLite schema. Three `PersistentVolumeClaim`s back `maps/`, `cogs/`, `db/`. A single Service exposes both container ports; the optional Ingress publishes them.
+What the chart creates:
+- One pod with two containers: the web UI and the tile server.
+- Three persistent volumes, for `maps`, `cogs` and `db`.
+- One Service.
+- An optional Ingress that publishes only the tile routes (`/rgb`, `/singleband`).
 
-Key `values.yaml` knobs:
+The chart runs a single replica, because the tile store is SQLite on `ReadWriteOnce` volumes.
 
-| Value | What it controls |
-|---|---|
-| `image.repository`, `image.tag` | Image to deploy. Defaults to the chart's `appVersion`. Set `latest` for the newest build of `main`, or `sha-<short>` for a specific commit. |
-| `ollebo.key` | Your map key from ollebo.com, stored in a Secret. |
-| `ollebo.spaceId`, `ollebo.apiUrl` | Non-sensitive config, stored in a ConfigMap. |
-| `terracotta.publicUrl` | Public URL for tile fetches — must match your Ingress host. |
-| `ingress.enabled`, `ingress.host`, `ingress.className`, `ingress.tlsSecret` | Ingress wiring. |
-| `ingress.exposeUi` | Also publish the web UI. Off by default because it has no login. |
-| `persistence.{maps,cogs,db}.size` | PVC size per dataset folder. |
-| `persistence.{maps,cogs,db}.storageClassName` | Per-PVC StorageClass override. |
+To reach the web UI:
 
-> **Single-replica only.** The chart pins `replicas: 1` and uses `Recreate` rollouts because the PVCs are `ReadWriteOnce` (the default on GKE/EKS/AKS managed disks) and SQLite is a single-writer database. If you need horizontal scaling, swap SQLite for a remote terracotta provider and use a `ReadWriteMany` StorageClass — that's a follow-up, not a supported knob today.
+```sh
+kubectl -n mapserver port-forward svc/mapserver 8888:8080
+```
 
-After install, `helm get notes mapserver` prints the resolved tile URL and a `kubectl port-forward` command for offline checking.
+Then open `http://localhost:8888`. `helm get notes mapserver -n mapserver` prints the same command and your tile URL.
 
----
+The full value reference is in [install/helm/mapserver/README.md](install/helm/mapserver/README.md) and [values.yaml](install/helm/mapserver/values.yaml).
 
-## Configuration reference
+## Connecting to ollebo.com
 
-These are the environment variables consumed by code:
+1. Sign in at [ollebo.com](https://www.ollebo.com). Open the Space where the maps should appear, and create a mapserver. Creating one needs the Pro or Full plan. You get a **map key**.
+2. Give the key to the mapserver. Either set `OLLEBO_KEY` or `ollebo.key` at install, or paste it on the **Settings** page.
+3. Set the **public tile URL** to the address viewers' browsers will use, e.g. `https://tiles.example.com`.
+4. Save Settings. The page shows **Connected to ollebo.com — _mapserver_ in _space_**, and every map already built is sent to the Space.
 
-| Variable | Default | Notes |
+From then on, each new map is sent when it finishes. When you change the public tile URL, save Settings again; the maps keep their place in ollebo.com and get the new address.
+
+If the status says **Map key not accepted**, the key is wrong or its mapserver was deleted on ollebo.com. If it says **Can't reach ollebo.com**, check outbound HTTPS from the server.
+
+The map key gives full control over that mapserver's maps on ollebo.com. Keep it secret. If it leaks, regenerate it on ollebo.com and paste the new one on the Settings page.
+
+## Configuration
+
+| Variable | Helm value | Default | What it does |
+|---|---|---|---|
+| `OLLEBO_KEY` | `ollebo.key` | _(empty)_ | Your map key. A key saved on the Settings page takes priority. |
+| `TERRACOTTA_PUBLIC_URL` | `terracotta.publicUrl` | `http://localhost:5001` | Tile address that viewers' browsers use. |
+| `API` | `ollebo.apiUrl` | `https://www.ollebo.com/api` | ollebo.com API. |
+| `OLLEBO_SPACE_ID` | `ollebo.spaceId` | `local` | Folder name for your maps inside the local tile store. It doesn't need to match ollebo.com. |
+| `TERRACOTTA_DB_PATH` | `terracotta.dbPath` | `/data/db/terracotta.sqlite` | Location of the tile store. |
+| `TC_ALLOWED_ORIGINS_TILES` | `terracotta.allowedOrigins` | `dash.ollebo.com`, `dash.northamlin.com` | Websites allowed to load your tiles (CORS). |
+
+## Storage
+
+| Folder | Mounted at | Contains |
 |---|---|---|
-| `OLLEBO_KEY` | _(empty)_ | Your map key from ollebo.com. A key saved on the Settings page takes priority. |
-| `OLLEBO_SPACE_ID` | `local` | First key in the terracotta `[space, map, variant]` schema. It doesn't need to match your ollebo.com space. |
-| `TERRACOTTA_PUBLIC_URL` | `http://localhost:5001` | Browser-facing tile URL. Must be reachable from any viewer. |
-| `API` | `https://www.ollebo.com/api` | ollebo.com API base. Where this server checks its key and registers maps. |
-| `TERRACOTTA_DB_PATH` | `/data/db/terracotta.sqlite` | SQLite location inside the container. |
-| `TERRACOTTA_PROVIDER` | `sqlite` | terracotta driver. Only `sqlite` is exercised today. |
+| `maps/` | `/data/maps` | Your source GeoTIFFs. |
+| `cogs/` | `/data/cogs` | Generated views, as `<space>/<map>/<variant>.tif`. |
+| `db/` | `/data/db` | Terracotta's tile store and the Settings page values. |
 
-For Docker installs, the install script writes these to `.env`. For Helm installs, they're set via `values.yaml`.
+Back up `maps/` and `db/`. `cogs/` can be rebuilt from `maps/` with Rescan.
 
-## Architecture in one paragraph
+## Development
 
-`code/start.py` is a Flask app with three real routes: `/` (home, lists maps from `/data/maps`), `/upload` (POST, prepends a random name and saves the file), `/mapmaker` (POST, runs the COG pipeline synchronously and redirects to `/map`). The pipeline in `code/mapmaker/makingGeotiff.py` opens the source with `rasterio`, classifies it via `detect_input_type`, and for each `VariantSpec` shells out to `gdal_translate` / `gdal_calc.py` / `gdaldem` to write a COG into `/data/cogs/<space>/<map>/<variant>.tif`. Each generated COG is registered into terracotta's SQLite DB. The viewer template renders a Leaflet map whose tile layer points at `${TERRACOTTA_PUBLIC_URL}/{singleband|rgb}/<space>/<map>/<variant>/{z}/{x}/{y}.png`.
+```
+code/
+  start.py              Flask routes: home, upload, map viewer, rescan, settings
+  start.sh              Container start: prepare the database, scan /data/maps, start gunicorn
+  config.py             Settings storage (SQLite)
+  ollebo.py             Calls to the ollebo.com API using the map key
+  listMaps.py           Lists maps for the home page
+  mapmaker/
+    makingGeotiff.py    Build pipeline and syncing with ollebo.com
+    maps/               Image detection, COG building, view definitions, Terracotta client
+  templates/, public/   Web UI
+install/
+  docker-install.sh     Interactive Docker install
+  helm/mapserver/       Helm chart
+```
 
-The COG/variant code under `code/mapmaker/maps/` is mirrored with the sibling `map-maker` project; changes in one should be ported to the other.
+The code under `code/mapmaker/maps/` is shared with OlleBo's hosted `map-maker` service. Port changes to both.
 
-## Container images
+Run locally with `docker compose up --build`. The override file mounts `./code`, so Python changes apply when the containers restart.
 
-CI (`.github/workflows/docker-publish.yml`) builds `Dockerfile_build` on every push to `main` and pull request, and publishes to GitHub Container Registry on pushes:
+## Releases
 
-- `ghcr.io/ollebo/mapserver:latest` — current `main`.
-- `ghcr.io/ollebo/mapserver:sha-<short>` — pinned to a specific commit.
-- `ghcr.io/ollebo/mapserver:X.Y.Z` — on git tags matching `v*.*.*`.
-- `oci://ghcr.io/ollebo/charts/mapserver` version `X.Y.Z` — the Helm chart, on the same git tags, after its image has been published.
+CI (`.github/workflows/docker-publish.yml`) builds the image and lints the chart on every pull request and push to `main`:
 
-Pull requests build the image for verification but don't push. The Docker install script builds locally from `Dockerfile_build`; the Helm chart runs the image matching its release by default.
+| Published to | Tag | When |
+|---|---|---|
+| `ghcr.io/ollebo/mapserver` | `latest`, `sha-<short>` | Every push to `main` |
+| `ghcr.io/ollebo/mapserver` | `X.Y.Z` | Git tags `vX.Y.Z` |
+| `oci://ghcr.io/ollebo/charts/mapserver` | `X.Y.Z` | Git tags `vX.Y.Z`, published after the image |
 
-## Known rough edges
+## Known limitations
 
-- **No auth on the tile server.** See "External reachability."
-- **No login on the web UI.** It can upload files and show the map key, so keep it private.
-- **Single-replica only on Kubernetes** because of SQLite + RWO PVCs.
-- **Container build is fragile.** `Dockerfile_build` uses `--break-system-packages` on Ubuntu 24.04 with pinned `terracotta==0.10.1`. A move to a venv-based image is on the roadmap; for now, rebuild from the pinned base if pip breakage occurs.
-- **Dev bind-mount is in a separate file.** `docker-compose.yaml` deploys the baked-in image. `docker-compose.override.yaml` adds the `./code:/code` live-reload mount and is auto-merged by `docker compose` when present. Delete it before publishing an image to production.
+- **No authentication.** See [Authentication is your job](#authentication-is-your-job).
+- **Maps deleted on ollebo.com come back.** They return the next time you save Settings or click Rescan. To keep a map off ollebo.com, also delete its source file from `maps/`. Syncing then skips that map and counts it as failed.
+- **Single replica.** SQLite and `ReadWriteOnce` volumes mean one pod at a time.
+- **Builds run inside the upload request.** A large GeoTIFF can take minutes, and the page waits until the build finishes.
